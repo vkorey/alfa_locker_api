@@ -9,6 +9,7 @@ dependencies = [
     "python-dotenv",
     "python-jose",
     "uvicorn[standard]>=0.30.6",
+    "idna>=3.8",
     ]
 
 
