@@ -195,14 +195,16 @@ class DeviceC:
 async def initialize_devices(config: Dict[str, Any]) -> Dict[str, DeviceC]:
     devices = {}
     for ip, details in config.items():
-        board_count = details["boards"]
-        dev = DeviceC(ip_address=ip, board_count=board_count)
-        await dev.connect()
-        devices[ip] = dev
+        try:
+            board_count = details["boards"]
+            dev = DeviceC(ip_address=ip, board_count=board_count)
+            await dev.connect()
+            devices[ip] = dev
 
-        for lock in details["locks"]:
-            lock_lookup[lock["id"]] = (ip, lock["board"], lock["lock"])
-
+            for lock in details["locks"]:
+                lock_lookup[lock["id"]] = (ip, lock["board"], lock["lock"])
+        except Exception as e:
+            logger.error(f"Failed to initialize device {ip}: {str(e)}")
     logger.info(f"Devices initialized: {devices}")
     return devices
 
