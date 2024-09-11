@@ -1,5 +1,6 @@
 import datetime
 import os
+import sys
 from typing import Any
 
 from dotenv import load_dotenv
@@ -38,16 +39,19 @@ def setup_logger() -> Any:
     global logger_initialized
     if not logger_initialized:
         log_level = os.getenv("LOG_LEVEL", "INFO").upper()
-        if not os.path.exists("./logs"):
-            os.makedirs("./logs")
         logger.add(
-            "./logs/log.log",
+            sys.stdout,
             enqueue=True,
-            rotation=rotator.should_rotate,
-            retention="30 days",
             level=log_level,
             format="{time:DD.MM.YYYY HH:mm:ss:SSSS} | {level: <8} | {message: <50} | {name}:{function}:{line}",
-            compression="zip",
+            colorize=True,
+            backtrace=True,
+        )
+        logger.add(
+            sys.stderr,
+            enqueue=True,
+            level="ERROR",
+            format="{time:DD.MM.YYYY HH:mm:ss:SSSS} | {level: <8} | {message: <50} | {name}:{function}:{line}",
             colorize=True,
             backtrace=True,
         )
