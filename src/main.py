@@ -24,6 +24,7 @@ from security import create_access_token
 from security import decode_token
 from security import oauth2_scheme
 
+
 logger = setup_logger()
 
 description = """
@@ -45,7 +46,6 @@ app = FastAPI(
     description=description,
     lifespan=lifespan,
 )
-
 router_v1 = APIRouter(
     prefix="/api/v1",
 )
@@ -92,6 +92,13 @@ async def pulse(command: CommandPulse, credentials: HTTPAuthorizationCredentials
     await pulse_lock(devices, command.id)
     return {"message": f"Locker # {command.id} opened"}
 
+@app.get("/health")
+async def health_check():
+    return {"status": "OK"}
+
+@app.get("/ready")
+async def readiness_check():
+    return {"status": "OK"}
 
 @router_v1.get(
     "/status",
@@ -103,6 +110,8 @@ async def lock_status(credentials: HTTPAuthorizationCredentials = Depends(oauth2
     token_data = decode_token(credentials)
     logger.info(f"User {token_data.username} is checking lock status")
     return await relaystatus(devices)
+
+
 
 
 app.include_router(router_v1)
