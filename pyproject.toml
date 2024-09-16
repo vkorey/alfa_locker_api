@@ -7,9 +7,9 @@ dependencies = [
     "loguru",
     "bcrypt",
     "python-dotenv",
-    "python-jose",
+    "pyjwt",
     "uvicorn[standard]>=0.30.6",
-    "idna>=3.8",
+    "idna==3.10",
     ]
 
 

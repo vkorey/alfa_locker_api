@@ -9,8 +9,8 @@ from fastapi import HTTPException
 from fastapi import status
 from fastapi.security import HTTPAuthorizationCredentials
 from fastapi.security import HTTPBearer
-from jose import jwt
-from jose import JWTError
+import jwt
+from jwt.exceptions import PyJWTError
 
 from config import ALGORITHM
 from config import PASSWORD_HASH
@@ -78,6 +78,6 @@ def decode_token(credentials: HTTPAuthorizationCredentials) -> TokenData:
 
         logger.info("Token decoded successfully")
         return TokenData(username=username)
-    except JWTError:
+    except PyJWTError:
         logger.error("Token decoding failed")
         raise credentials_exception

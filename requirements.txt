@@ -31,8 +31,6 @@ click==8.1.7
     #   uvicorn
 dnspython==2.6.1
     # via email-validator
-ecdsa==0.19.0
-    # via python-jose
 email-validator==2.2.0
     # via fastapi
 fastapi[standard]==0.112.0
@@ -53,7 +51,7 @@ httptools==0.6.1
     # via uvicorn
 httpx==0.27.0
     # via fastapi
-idna==3.8
+idna==3.10
     # via
     #   anyio
     #   apfa_locker_api (pyproject.toml)
@@ -74,34 +72,26 @@ multidict==6.0.5
     # via
     #   aiohttp
     #   yarl
-pyasn1==0.6.0
-    # via
-    #   python-jose
-    #   rsa
 pydantic==2.8.2
     # via fastapi
 pydantic-core==2.20.1
     # via pydantic
 pygments==2.18.0
     # via rich
+pyjwt==2.9.0
+    # via apfa_locker_api (pyproject.toml)
 python-dotenv==1.0.1
     # via
     #   apfa_locker_api (pyproject.toml)
     #   uvicorn
-python-jose==3.3.0
-    # via apfa_locker_api (pyproject.toml)
 python-multipart==0.0.9
     # via fastapi
 pyyaml==6.0.2
     # via uvicorn
 rich==13.7.1
     # via typer
-rsa==4.9
-    # via python-jose
 shellingham==1.5.4
     # via typer
-six==1.16.0
-    # via ecdsa
 sniffio==1.3.1
     # via
     #   anyio
