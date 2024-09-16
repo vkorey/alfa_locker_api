@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import timedelta
 from typing import Any, AsyncGenerator, Dict
@@ -16,14 +17,11 @@ from models import ResponsePulse
 from models import ResponseStatus
 from models import TokenRequest
 from models import TokenResponse
-from relay import initialize_devices
-from relay import pulse_lock
-from relay import relaystatus
+from relay import device_manager
 from security import authenticate_user
 from security import create_access_token
 from security import decode_token
 from security import oauth2_scheme
-
 
 logger = setup_logger()
 
@@ -34,10 +32,9 @@ description = """
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[Any, Any]:
-    global devices
-    devices = await initialize_devices(CONFIG)
-    yield devices
-    for device in devices.values():
+    asyncio.create_task(device_manager.initialize_devices_background(CONFIG))
+    yield
+    for device in device_manager.get_devices().values():
         await device.disconnect()
 
 
@@ -89,16 +86,23 @@ async def read_users_me(credentials: HTTPAuthorizationCredentials = Depends(oaut
 async def pulse(command: CommandPulse, credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)) -> dict:
     token_data = decode_token(credentials)
     logger.info(f"Unlocking lock with ID: {command.id} by user {token_data.username}")
-    await pulse_lock(devices, command.id)
-    return {"message": f"Locker # {command.id} opened"}
+
+    devices = device_manager.get_devices()
+    if not devices:
+        raise HTTPException(status_code=503, detail="Devices are not initialized yet")
+
+    return await device_manager.pulse_lock(command.id)
+
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> dict:
     return {"status": "OK"}
 
+
 @app.get("/ready")
-async def readiness_check():
+async def readiness_check() -> dict:
     return {"status": "OK"}
+
 
 @router_v1.get(
     "/status",
@@ -109,9 +113,12 @@ async def readiness_check():
 async def lock_status(credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)) -> dict:
     token_data = decode_token(credentials)
     logger.info(f"User {token_data.username} is checking lock status")
-    return await relaystatus(devices)
 
+    devices = device_manager.get_devices()
+    if not devices:
+        raise HTTPException(status_code=503, detail="Devices are not initialized yet")
 
+    return await device_manager.relaystatus()
 
 
 app.include_router(router_v1)

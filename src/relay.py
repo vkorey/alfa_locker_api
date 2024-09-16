@@ -11,8 +11,6 @@ from logger_config import setup_logger
 
 logger = setup_logger()
 
-lock_lookup: Dict[str, Tuple[str, int, int]] = {}
-
 
 class DeviceC:
     def __init__(self, ip_address: str, board_count: int):
@@ -192,50 +190,82 @@ class DeviceC:
         return module_status
 
 
-async def initialize_devices(config: Dict[str, Any]) -> Dict[str, DeviceC]:
-    devices = {}
-    for ip, details in config.items():
+class DeviceManager:
+    def __init__(self) -> None:
+        self.devices: Dict[str, DeviceC] = {}
+        self.lock_lookup: Dict[str, Tuple[str, int, int]] = {}
+
+    async def connect_device(self, ip: str, details: Dict[str, Any]) -> None:
+        board_count = details["boards"]
+        dev = DeviceC(ip_address=ip, board_count=board_count)
+        await dev.connect()
+        self.devices[ip] = dev
+
+        for lock in details["locks"]:
+            self.lock_lookup[lock["id"]] = (ip, lock["board"], lock["lock"])
+
+        logger.info(f"Device {ip} initialized successfully")
+
+    async def initialize_single_device(self, ip: str, details: Dict[str, Any]) -> bool:
+        if ip in self.devices:
+            return True  # Already initialized
+
         try:
-            board_count = details["boards"]
-            dev = DeviceC(ip_address=ip, board_count=board_count)
-            await dev.connect()
-            devices[ip] = dev
-
-            for lock in details["locks"]:
-                lock_lookup[lock["id"]] = (ip, lock["board"], lock["lock"])
-        except Exception as e:
+            await self.connect_device(ip, details)
+            return True
+        except Exception as e:  # noqa
             logger.error(f"Failed to initialize device {ip}: {str(e)}")
-    logger.info(f"Devices initialized: {devices}")
-    return devices
+            return False
+
+    async def initialize_devices(self, config: Dict[str, Any]) -> bool:
+        tasks = [self.initialize_single_device(ip, details) for ip, details in config.items()]
+        results = await asyncio.gather(*tasks)
+        return all(results)
+
+    async def initialize_devices_background(self, config: Dict[str, Any]) -> None:
+        while True:
+            all_initialized = await self.initialize_devices(config)
+
+            if all_initialized:
+                logger.info("All devices initialized successfully")
+                break
+
+            await asyncio.sleep(10)
+
+        logger.info(f"Devices initialized: {self.devices}")
+
+    def get_devices(self) -> Dict[str, DeviceC]:
+        return self.devices
+
+    async def pulse_lock(self, lock_id: str) -> dict:
+        if lock_id in self.lock_lookup:
+            ip, board, lock_number = self.lock_lookup[lock_id]
+            device = self.devices[ip]
+            logger.info(f"Unlocking locker # {lock_number} on board {board} of device {ip}")
+            await device.unlock_send(board, lock_number)
+            logger.info(f"Locker # {lock_id} opened on board {board} of device {ip}")
+            return {"message": f"Locker # {lock_id} opened successfully"}
+
+        logger.error(f"Locker # {lock_id} not found")
+        return {"error": f"Locker # {lock_id} not found"}
+
+    async def relaystatus(self) -> dict:
+        start_time = time.time()
+        status_result: dict = {"id": {}}
+
+        tasks = [device.get_status() for device in self.devices.values()]
+        all_statuses = await asyncio.gather(*tasks)
+
+        for ip, gateway_status in zip(self.devices.keys(), all_statuses):
+            for lock in CONFIG[ip]["locks"]:
+                board = lock["board"]
+                lock_number = lock["lock"]
+                status = gateway_status.get(board, {}).get(lock_number, {}).get("lock", False)
+                status_result["id"][lock["id"]] = {"status": status}
+        end_time = time.time()
+        duration = end_time - start_time
+        logger.info(f"Request took {duration:.2f} seconds")
+        return status_result
 
 
-async def relaystatus(devices: Dict[str, DeviceC]) -> dict:
-    start_time = time.time()
-    status_result: dict = {"id": {}}
-
-    tasks = [device.get_status() for device in devices.values()]
-    all_statuses = await asyncio.gather(*tasks)
-
-    for ip, gateway_status in zip(devices.keys(), all_statuses):
-        for lock in CONFIG[ip]["locks"]:
-            board = lock["board"]
-            lock_number = lock["lock"]
-            status = gateway_status.get(board, {}).get(lock_number, {}).get("lock", False)
-            status_result["id"][lock["id"]] = {"status": status}
-    end_time = time.time()
-    duration = end_time - start_time
-    logger.info(f"Request took {duration:.2f} seconds")
-    return status_result
-
-
-async def pulse_lock(devices: Dict[str, DeviceC], lock_id: str) -> dict:
-    if lock_id in lock_lookup:
-        ip, board, lock_number = lock_lookup[lock_id]
-        device = devices[ip]
-        logger.info(f"Unlocking locker # {lock_number} on board {board} of device {ip}")
-        await device.unlock_send(board, lock_number)
-        logger.info(f"Locker # {lock_id} opened on board {board} of device {ip}")
-        return {"message": f"Locker # {lock_id} opened successfully"}
-
-    logger.error(f"Locker # {lock_id} not found")
-    return {"error": f"Locker # {lock_id} not found"}
+device_manager = DeviceManager()
