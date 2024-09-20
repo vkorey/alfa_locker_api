@@ -1,6 +1,6 @@
 {
     "192.168.77.237": {
-        "boards": 2,
+        "boards": 1,
         "locks": [
             { "id": "A1", "board": 0, "lock": 1 },
             { "id": "A2", "board": 0, "lock": 2 },

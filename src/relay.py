@@ -109,7 +109,7 @@ class DeviceC:
                 await self._handle_connect_error()
             except Exception as e:  # noqa
                 logger.error(f"Unhandled exception for device {self.ip}: {str(e)}")
-                break
+                await self._handle_connect_error()
 
     async def _write_command(self, command: bytes) -> None:
         logger.debug(f"Writing command to device {self.ip}")
