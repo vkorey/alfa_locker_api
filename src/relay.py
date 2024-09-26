@@ -208,7 +208,7 @@ class DeviceManager:
 
     async def initialize_single_device(self, ip: str, details: Dict[str, Any]) -> bool:
         if ip in self.devices:
-            return True  # Already initialized
+            return True
 
         try:
             await self.connect_device(ip, details)
