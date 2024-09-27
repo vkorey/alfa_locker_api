@@ -25,10 +25,12 @@ class DeviceC:
         self.cache: Dict[bytes, Dict[str, Any]] = {}
         self.timeout = 2
         self.retry_delay = 2
+        logger.info(f"DeviceC initialized for IP: {ip_address} with {board_count} boards")
 
     async def connect(self) -> None:
-        logger.debug(f"Connecting to device: {self.ip}")
+        logger.info(f"Attempting to connect to device: {self.ip}")
         self.reader, self.writer = await asyncio.open_connection(self.ip, self.port)
+        logger.info(f"Successfully connected to device: {self.ip}")
 
     async def disconnect(self) -> None:
         if self.writer:
@@ -43,6 +45,7 @@ class DeviceC:
                 self.writer = None
 
     async def status_send(self, command: bytes, retries: int = 3) -> Optional[bytes]:
+        logger.debug(f"Sending status command to {self.ip}: {command.hex()}")
         cached_response = self._get_cached_response(command)
         if cached_response:
             return cached_response
@@ -58,12 +61,14 @@ class DeviceC:
         return None
 
     async def _attempt_send_command(self, command: bytes, retries: int) -> Optional[bytes]:
+        logger.debug(f"Attempting to send command to {self.ip}: {command.hex()}")
         async with self.semaphore:
             for attempt in range(retries):
                 try:
                     await self._write_command(command)
                     response = await self._read_response()
                     if response is not None:
+                        logger.debug(f"Received response from {self.ip}: {response.hex()}")
                         self._cache_response(command, response)
                     return response
                 except (ConnectionResetError, asyncio.IncompleteReadError) as e:
@@ -72,6 +77,7 @@ class DeviceC:
                 except Exception as e:  # noqa
                     logger.error(f"Unhandled exception for device {self.ip}: {str(e)}")
                     break
+            logger.warning(f"No response received from {self.ip} after {retries} attempts")
             return None
 
     def _cache_response(self, command: bytes, response: bytes) -> None:
@@ -79,6 +85,7 @@ class DeviceC:
 
     async def unlock_send(self, board: int, lock: int, retries: int = 3) -> None:
         command = self._build_unlock_command(board, lock)
+        logger.info(f"Queueing unlock command for {self.ip}, board {board}, lock {lock}: {command.hex()}")
         async with self.queue_lock:
             self.command_queue.append((command, retries))
         asyncio.create_task(self._process_command_queue())
@@ -92,6 +99,7 @@ class DeviceC:
         return bytes([stx, board, lock, cmd, etx, sum_value])
 
     async def _process_command_queue(self) -> None:
+        logger.debug(f"Processing command queue for {self.ip}")
         async with self.queue_lock:
             while self.command_queue:
                 command, retries = self.command_queue.popleft()
@@ -151,6 +159,7 @@ class DeviceC:
             return None
 
     async def get_status(self) -> dict:
+        logger.info(f"Getting status for all boards on {self.ip}")
         combined_status = {}
         for board in range(self.board_count):
             command = self._build_status_command(board)
@@ -159,11 +168,11 @@ class DeviceC:
                 logger.error(f"Failed to get status for board {board} on {self.ip}")
                 continue
             module_responses = [responses[i : i + 12] for i in range(0, len(responses), 12)]
-            logger.debug(f"Module responses from board {board}: {module_responses}")
+            logger.debug(f"Module responses from ip {self.ip} board {board}: {module_responses}")
             for module_response in module_responses:
                 module_status = await self.parse_status(module_response)
                 combined_status[board] = module_status
-        logger.debug(f"Combined status for {self.ip}: {combined_status}")
+        logger.info(f"Status retrieved for {self.ip}: {combined_status}")
         return combined_status
 
     def _build_status_command(self, board: int) -> bytes:
@@ -177,7 +186,7 @@ class DeviceC:
         if not response or len(response) != 12:
             logger.error("Invalid response")
             return {}
-
+        logger.debug(f"Pre parsed status for {self.ip}: {response.hex()}")
         statuses = response[4:10]
         module_status = {}
 
@@ -186,6 +195,7 @@ class DeviceC:
             bit_index = i % 8
             lock_status = bool(statuses[byte_index] & (1 << bit_index))
             module_status[i + 1] = {"lock": lock_status}
+        logger.debug(f"Module parsed status for {self.ip}: {module_status}")
 
         return module_status
 
@@ -238,6 +248,7 @@ class DeviceManager:
         return self.devices
 
     async def pulse_lock(self, lock_id: str) -> dict:
+        logger.info(f"Attempting to pulse lock: {lock_id}")
         if lock_id in self.lock_lookup:
             ip, board, lock_number = self.lock_lookup[lock_id]
             device = self.devices[ip]
@@ -246,10 +257,11 @@ class DeviceManager:
             logger.info(f"Locker # {lock_id} opened on board {board} of device {ip}")
             return {"message": f"Locker # {lock_id} opened successfully"}
 
-        logger.error(f"Locker # {lock_id} not found")
+        logger.error(f"Lock ID not found in lookup: {lock_id}")
         return {"error": f"Locker # {lock_id} not found"}
 
     async def relaystatus(self) -> dict:
+        logger.info("Starting relaystatus request")
         start_time = time.time()
         status_result: dict = {"id": {}}
 
@@ -264,6 +276,7 @@ class DeviceManager:
                 status_result["id"][lock["id"]] = {"status": status}
         end_time = time.time()
         duration = end_time - start_time
+        logger.info(f"Relaystatus request completed. Result: {status_result}")
         logger.info(f"Request took {duration:.2f} seconds")
         return status_result
 
