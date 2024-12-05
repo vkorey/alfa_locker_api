@@ -28,9 +28,15 @@ class DeviceC:
         logger.info(f"DeviceC initialized for IP: {ip_address} with {board_count} boards")
 
     async def connect(self) -> None:
-        logger.info(f"Attempting to connect to device: {self.ip}")
-        self.reader, self.writer = await asyncio.open_connection(self.ip, self.port)
-        logger.info(f"Successfully connected to device: {self.ip}")
+        try:
+            logger.info(f"Attempting to connect to device: {self.ip}")
+            self.reader, self.writer = await asyncio.wait_for(asyncio.open_connection(self.ip, self.port), timeout=5.0)
+            logger.info(f"Successfully connected to device: {self.ip}")
+        except Exception as e:
+            logger.error(f"Failed to connect to device {self.ip}: {str(e)}")
+            self.reader = None
+            self.writer = None
+            raise
 
     async def disconnect(self) -> None:
         if self.writer:
@@ -208,13 +214,18 @@ class DeviceManager:
     async def connect_device(self, ip: str, details: Dict[str, Any]) -> None:
         board_count = details["boards"]
         dev = DeviceC(ip_address=ip, board_count=board_count)
-        await dev.connect()
-        self.devices[ip] = dev
+        try:
+            await dev.connect()
+            self.devices[ip] = dev
 
-        for lock in details["locks"]:
-            self.lock_lookup[lock["id"]] = (ip, lock["board"], lock["lock"])
+            for lock in details["locks"]:
+                self.lock_lookup[lock["id"]] = (ip, lock["board"], lock["lock"])
 
-        logger.info(f"Device {ip} initialized successfully")
+            logger.info(f"Device {ip} initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize device {ip}: {str(e)}")
+            for lock in details["locks"]:
+                self.lock_lookup[lock["id"]] = (ip, lock["board"], lock["lock"])
 
     async def initialize_single_device(self, ip: str, details: Dict[str, Any]) -> bool:
         if ip in self.devices:
@@ -234,11 +245,21 @@ class DeviceManager:
 
     async def initialize_devices_background(self, config: Dict[str, Any]) -> None:
         while True:
-            all_initialized = await self.initialize_devices(config)
-
-            if all_initialized:
-                logger.info("All devices initialized successfully")
-                break
+            for ip, details in config.items():
+                if ip not in self.devices:
+                    try:
+                        await self.connect_device(ip, details)
+                        logger.info(f"Device {ip} initialized successfully")
+                    except Exception as e:
+                        logger.error(f"Failed to initialize device {ip}: {str(e)}")
+                else:
+                    device = self.devices[ip]
+                    if device.writer is None or device.reader is None:
+                        try:
+                            await device.connect()
+                            logger.info(f"Device {ip} reconnected successfully")
+                        except Exception as e:
+                            logger.error(f"Failed to reconnect device {ip}: {str(e)}")
 
             await asyncio.sleep(10)
 
@@ -265,19 +286,22 @@ class DeviceManager:
         start_time = time.time()
         status_result: dict = {"id": {}}
 
-        tasks = [device.get_status() for device in self.devices.values()]
-        all_statuses = await asyncio.gather(*tasks)
+        for ip, device in self.devices.items():
+            try:
+                device_status = await device.get_status()
+                for lock in CONFIG[ip]["locks"]:
+                    board = lock["board"]
+                    lock_number = lock["lock"]
+                    status = device_status.get(board, {}).get(lock_number, {}).get("lock", None)
+                    status_result["id"][lock["id"]] = {"status": status}
+            except Exception as e:
+                logger.error(f"Failed to get status from device {ip}: {str(e)}")
+                for lock in CONFIG[ip]["locks"]:
+                    status_result["id"][lock["id"]] = {"status": None}
 
-        for ip, gateway_status in zip(self.devices.keys(), all_statuses):
-            for lock in CONFIG[ip]["locks"]:
-                board = lock["board"]
-                lock_number = lock["lock"]
-                status = gateway_status.get(board, {}).get(lock_number, {}).get("lock", False)
-                status_result["id"][lock["id"]] = {"status": status}
         end_time = time.time()
         duration = end_time - start_time
-        logger.info(f"Relaystatus request completed. Result: {status_result}")
-        logger.info(f"Request took {duration:.2f} seconds")
+        logger.info(f"Relaystatus request completed in {duration:.2f} seconds")
         return status_result
 
 
