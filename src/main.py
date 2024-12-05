@@ -107,7 +107,7 @@ async def readiness_check() -> dict:
 @router_v1.get(
     "/status",
     tags=["Status"],
-    description=("Получить статус локеров тип C. " "True - закрыт, False - открыт, null - оффлайн. " "Будет возвращен статус всех замков в системе."),
+    description=("Получить статус локеров тип C. " "True - закрыт, False - открыт, null - оффлайн. " "Будет возвращен статус всех замков в сис��еме."),
     response_model=ResponseStatus,
 )
 async def lock_status(credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)) -> dict:
@@ -119,6 +119,17 @@ async def lock_status(credentials: HTTPAuthorizationCredentials = Depends(oauth2
         raise HTTPException(status_code=503, detail="Devices are not initialized yet")
 
     return await device_manager.relaystatus()
+
+
+@router_v1.get(
+    "/network_status",
+    tags=["Status"],
+    description="Получить статус подключения сетевых реле. Возвращает состояние подключения для каждого устройства.",
+)
+async def network_status(credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)) -> dict:
+    token_data = decode_token(credentials)
+    logger.info(f"User {token_data.username} is checking network status")
+    return await device_manager.get_network_status()
 
 
 app.include_router(router_v1)

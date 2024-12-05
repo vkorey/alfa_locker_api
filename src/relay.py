@@ -304,5 +304,20 @@ class DeviceManager:
         logger.info(f"Relaystatus request completed in {duration:.2f} seconds")
         return status_result
 
+    async def get_network_status(self) -> dict:
+        logger.info("Getting network status for all devices")
+        status_result = {}
+
+        for ip in CONFIG.keys():
+            device = self.devices.get(ip)
+            if device is None:
+                status_result[ip] = {"status": "offline", "boards": CONFIG[ip]["boards"], "last_error": "Device not initialized"}
+            elif device.writer is None or device.reader is None:
+                status_result[ip] = {"status": "disconnected", "boards": CONFIG[ip]["boards"], "last_error": "Connection lost"}
+            else:
+                status_result[ip] = {"status": "online", "boards": CONFIG[ip]["boards"], "last_error": None}
+
+        return status_result
+
 
 device_manager = DeviceManager()
