@@ -9,9 +9,8 @@ services:
     ports:
       - "${PORT:-8000}:${PORT:-8000}"
     volumes:
-      - ./config.json:/app/config.json
+      - ./src/config.json:/app/config.json
     env_file:
       - .env
     environment:
       - PORT=${PORT:-8000}
-

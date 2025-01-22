@@ -107,7 +107,7 @@ async def readiness_check() -> dict:
 @router_v1.get(
     "/status",
     tags=["Status"],
-    description=("Получить статус локеров тип C. " "True - закрыт, False - открыт, null - оффлайн. " "Будет возвращен статус всех замков в сис��еме."),
+    description=("Получить статус локеров тип C. " "True - закрыт, False - открыт, null - оффлайн. " "Будет возвращен статус всех замков в системе."),
     response_model=ResponseStatus,
 )
 async def lock_status(credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)) -> dict:
