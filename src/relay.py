@@ -25,12 +25,16 @@ class DeviceC:
         self.cache: Dict[bytes, Dict[str, Any]] = {}
         self.timeout = 2
         self.retry_delay = 2
-        logger.info(f"DeviceC initialized for IP: {ip_address} with {board_count} boards")
+        logger.info(
+            f"DeviceC initialized for IP: {ip_address} with {board_count} boards"
+        )
 
     async def connect(self) -> None:
         try:
             logger.info(f"Attempting to connect to device: {self.ip}")
-            self.reader, self.writer = await asyncio.wait_for(asyncio.open_connection(self.ip, self.port), timeout=5.0)
+            self.reader, self.writer = await asyncio.wait_for(
+                asyncio.open_connection(self.ip, self.port), timeout=5.0
+            )
             logger.info(f"Successfully connected to device: {self.ip}")
         except Exception as e:
             logger.error(f"Failed to connect to device {self.ip}: {str(e)}")
@@ -66,7 +70,9 @@ class DeviceC:
                 return cache_entry["response"]
         return None
 
-    async def _attempt_send_command(self, command: bytes, retries: int) -> Optional[bytes]:
+    async def _attempt_send_command(
+        self, command: bytes, retries: int
+    ) -> Optional[bytes]:
         logger.debug(f"Attempting to send command to {self.ip}: {command.hex()}")
         async with self.semaphore:
             for attempt in range(retries):
@@ -74,16 +80,22 @@ class DeviceC:
                     await self._write_command(command)
                     response = await self._read_response()
                     if response is not None:
-                        logger.debug(f"Received response from {self.ip}: {response.hex()}")
+                        logger.debug(
+                            f"Received response from {self.ip}: {response.hex()}"
+                        )
                         self._cache_response(command, response)
                     return response
                 except (ConnectionResetError, asyncio.IncompleteReadError) as e:
-                    logger.warning(f"Attempt {attempt + 1}/{retries} failed for device {self.ip}: {str(e)}. Retrying...")
+                    logger.warning(
+                        f"Attempt {attempt + 1}/{retries} failed for device {self.ip}: {str(e)}. Retrying..."
+                    )
                     await self._handle_connect_error()
                 except Exception as e:  # noqa
                     logger.error(f"Unhandled exception for device {self.ip}: {str(e)}")
                     break
-            logger.warning(f"No response received from {self.ip} after {retries} attempts")
+            logger.warning(
+                f"No response received from {self.ip} after {retries} attempts"
+            )
             return None
 
     def _cache_response(self, command: bytes, response: bytes) -> None:
@@ -91,7 +103,9 @@ class DeviceC:
 
     async def unlock_send(self, board: int, lock: int, retries: int = 3) -> None:
         command = self._build_unlock_command(board, lock)
-        logger.info(f"Queueing unlock command for {self.ip}, board {board}, lock {lock}: {command.hex()}")
+        logger.info(
+            f"Queueing unlock command for {self.ip}, board {board}, lock {lock}: {command.hex()}"
+        )
         async with self.queue_lock:
             self.command_queue.append((command, retries))
         asyncio.create_task(self._process_command_queue())
@@ -119,7 +133,9 @@ class DeviceC:
                 logger.info(f"Command sent successfully to device {self.ip}")
                 break
             except (ConnectionResetError, asyncio.IncompleteReadError) as e:
-                logger.warning(f"Attempt {attempt + 1}/{retries} failed for device {self.ip}: {str(e)}. Retrying...")
+                logger.warning(
+                    f"Attempt {attempt + 1}/{retries} failed for device {self.ip}: {str(e)}. Retrying..."
+                )
                 await self._handle_connect_error()
             except Exception as e:  # noqa
                 logger.error(f"Unhandled exception for device {self.ip}: {str(e)}")
@@ -142,7 +158,9 @@ class DeviceC:
         expected_length = 12
         with contextlib.suppress(asyncio.TimeoutError):
             while len(full_response) < expected_length:
-                response = await self._read_partial_response(expected_length - len(full_response))
+                response = await self._read_partial_response(
+                    expected_length - len(full_response)
+                )
                 if response:
                     full_response.extend(response)
                 else:
@@ -159,7 +177,9 @@ class DeviceC:
             logger.error("Reader is not initialized")
             return None
         try:
-            response = await asyncio.wait_for(self.reader.read(length), timeout=self.timeout)
+            response = await asyncio.wait_for(
+                self.reader.read(length), timeout=self.timeout
+            )
             return response if response else None
         except asyncio.TimeoutError:
             return None
@@ -173,8 +193,12 @@ class DeviceC:
             if responses is None:
                 logger.error(f"Failed to get status for board {board} on {self.ip}")
                 continue
-            module_responses = [responses[i : i + 12] for i in range(0, len(responses), 12)]
-            logger.debug(f"Module responses from ip {self.ip} board {board}: {module_responses}")
+            module_responses = [
+                responses[i : i + 12] for i in range(0, len(responses), 12)
+            ]
+            logger.debug(
+                f"Module responses from ip {self.ip} board {board}: {module_responses}"
+            )
             for module_response in module_responses:
                 module_status = await self.parse_status(module_response)
                 combined_status[board] = module_status
@@ -239,7 +263,9 @@ class DeviceManager:
             return False
 
     async def initialize_devices(self, config: Dict[str, Any]) -> bool:
-        tasks = [self.initialize_single_device(ip, details) for ip, details in config.items()]
+        tasks = [
+            self.initialize_single_device(ip, details) for ip, details in config.items()
+        ]
         results = await asyncio.gather(*tasks)
         return all(results)
 
@@ -273,7 +299,9 @@ class DeviceManager:
         if lock_id in self.lock_lookup:
             ip, board, lock_number = self.lock_lookup[lock_id]
             device = self.devices[ip]
-            logger.info(f"Unlocking locker # {lock_number} on board {board} of device {ip}")
+            logger.info(
+                f"Unlocking locker # {lock_number} on board {board} of device {ip}"
+            )
             await device.unlock_send(board, lock_number)
             logger.info(f"Locker # {lock_id} opened on board {board} of device {ip}")
             return {"message": f"Locker # {lock_id} opened successfully"}
@@ -292,7 +320,11 @@ class DeviceManager:
                 for lock in CONFIG[ip]["locks"]:
                     board = lock["board"]
                     lock_number = lock["lock"]
-                    status = device_status.get(board, {}).get(lock_number, {}).get("lock", None)
+                    status = (
+                        device_status.get(board, {})
+                        .get(lock_number, {})
+                        .get("lock", None)
+                    )
                     status_result["id"][lock["id"]] = {"status": status}
             except Exception as e:
                 logger.error(f"Failed to get status from device {ip}: {str(e)}")
@@ -311,11 +343,23 @@ class DeviceManager:
         for ip in CONFIG.keys():
             device = self.devices.get(ip)
             if device is None:
-                status_result[ip] = {"status": "offline", "boards": CONFIG[ip]["boards"], "last_error": "Device not initialized"}
+                status_result[ip] = {
+                    "status": "offline",
+                    "boards": CONFIG[ip]["boards"],
+                    "last_error": "Device not initialized",
+                }
             elif device.writer is None or device.reader is None:
-                status_result[ip] = {"status": "disconnected", "boards": CONFIG[ip]["boards"], "last_error": "Connection lost"}
+                status_result[ip] = {
+                    "status": "disconnected",
+                    "boards": CONFIG[ip]["boards"],
+                    "last_error": "Connection lost",
+                }
             else:
-                status_result[ip] = {"status": "online", "boards": CONFIG[ip]["boards"], "last_error": None}
+                status_result[ip] = {
+                    "status": "online",
+                    "boards": CONFIG[ip]["boards"],
+                    "last_error": None,
+                }
 
         return status_result
 

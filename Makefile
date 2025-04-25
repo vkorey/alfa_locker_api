@@ -26,3 +26,6 @@ build:
 
 save:
 	docker save locker_api:latest -o locker_api.tar
+
+push_docker_image:
+	docker buildx build --platform linux/amd64,linux/arm64 -t vkorey/locker_api:kerong --push .

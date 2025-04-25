@@ -50,7 +50,9 @@ router_v1 = APIRouter(
 devices: Dict[str, Any] = {}
 
 
-@router_v1.post("/token", response_model=TokenResponse, summary="Method for getting access token")
+@router_v1.post(
+    "/token", response_model=TokenResponse, summary="Method for getting access token"
+)
 async def login_for_access_token(form_data: TokenRequest) -> TokenResponse:
     user = authenticate_user(form_data.username, form_data.password)
     logger.info(f"User {form_data.username} attempted to login")
@@ -64,14 +66,18 @@ async def login_for_access_token(form_data: TokenRequest) -> TokenResponse:
 
     access_token_expires = timedelta(days=14)
     logger.info(f"access_token_expires: {access_token_expires}")
-    access_token = create_access_token(data={"sub": user}, expires_delta=access_token_expires)
+    access_token = create_access_token(
+        data={"sub": user}, expires_delta=access_token_expires
+    )
 
     logger.info(f"User {user} get token successfully")
     return TokenResponse(access_token=access_token, token_type="bearer")
 
 
 @router_v1.get("/users/me")
-async def read_users_me(credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)) -> dict:
+async def read_users_me(
+    credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme),
+) -> dict:
     token_data = decode_token(credentials)
     logger.info(f"User {token_data.username} accessed protected route")
     return {"username": token_data.username}
@@ -80,10 +86,17 @@ async def read_users_me(credentials: HTTPAuthorizationCredentials = Depends(oaut
 @router_v1.post(
     "/pulse",
     tags=["Open"],
-    description=("Открытие замка, и автоматическое " "закрытие через заданное время. " "ID устройства и время задаются в запросе."),
+    description=(
+        "Открытие замка, и автоматическое "
+        "закрытие через заданное время. "
+        "ID устройства и время задаются в запросе."
+    ),
     response_model=ResponsePulse,
 )
-async def pulse(command: CommandPulse, credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)) -> dict:
+async def pulse(
+    command: CommandPulse,
+    credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme),
+) -> dict:
     token_data = decode_token(credentials)
     logger.info(f"Unlocking lock with ID: {command.id} by user {token_data.username}")
 
@@ -107,10 +120,16 @@ async def readiness_check() -> dict:
 @router_v1.get(
     "/status",
     tags=["Status"],
-    description=("Получить статус локеров тип C. " "True - закрыт, False - открыт, null - оффлайн. " "Будет возвращен статус всех замков в системе."),
+    description=(
+        "Получить статус локеров тип C. "
+        "True - закрыт, False - открыт, null - оффлайн. "
+        "Будет возвращен статус всех замков в системе."
+    ),
     response_model=ResponseStatus,
 )
-async def lock_status(credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)) -> dict:
+async def lock_status(
+    credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme),
+) -> dict:
     token_data = decode_token(credentials)
     logger.info(f"User {token_data.username} is checking lock status")
 
@@ -126,7 +145,9 @@ async def lock_status(credentials: HTTPAuthorizationCredentials = Depends(oauth2
     tags=["Status"],
     description="Получить статус подключения сетевых реле. Возвращает состояние подключения для каждого устройства.",
 )
-async def network_status(credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme)) -> dict:
+async def network_status(
+    credentials: HTTPAuthorizationCredentials = Depends(oauth2_scheme),
+) -> dict:
     token_data = decode_token(credentials)
     logger.info(f"User {token_data.username} is checking network status")
     return await device_manager.get_network_status()
