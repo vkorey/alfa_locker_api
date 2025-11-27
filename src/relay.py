@@ -1,9 +1,8 @@
 import asyncio
-from collections import deque
 import contextlib
-from datetime import datetime
-from datetime import timedelta
 import time
+from collections import deque
+from datetime import datetime, timedelta
 from typing import Any, Deque, Dict, Optional, Tuple
 
 from config import CONFIG
@@ -222,10 +221,8 @@ class DeviceManager:
                 self.lock_lookup[lock["id"]] = (ip, lock["board"], lock["lock"])
 
             logger.info(f"Device {ip} initialized successfully")
-        except Exception as e:
+        except Exception as e:  # noqa: PIE786
             logger.error(f"Failed to initialize device {ip}: {str(e)}")
-            for lock in details["locks"]:
-                self.lock_lookup[lock["id"]] = (ip, lock["board"], lock["lock"])
 
     async def initialize_single_device(self, ip: str, details: Dict[str, Any]) -> bool:
         if ip in self.devices:
@@ -234,7 +231,7 @@ class DeviceManager:
         try:
             await self.connect_device(ip, details)
             return True
-        except Exception as e:  # noqa
+        except Exception as e:  # noqa: PIE786
             logger.error(f"Failed to initialize device {ip}: {str(e)}")
             return False
 
@@ -246,24 +243,30 @@ class DeviceManager:
     async def initialize_devices_background(self, config: Dict[str, Any]) -> None:
         while True:
             for ip, details in config.items():
-                if ip not in self.devices:
-                    try:
-                        await self.connect_device(ip, details)
-                        logger.info(f"Device {ip} initialized successfully")
-                    except Exception as e:
-                        logger.error(f"Failed to initialize device {ip}: {str(e)}")
-                else:
-                    device = self.devices[ip]
-                    if device.writer is None or device.reader is None:
-                        try:
-                            await device.connect()
-                            logger.info(f"Device {ip} reconnected successfully")
-                        except Exception as e:
-                            logger.error(f"Failed to reconnect device {ip}: {str(e)}")
+                await self._ensure_device_connected(ip, details)
 
             await asyncio.sleep(10)
 
-        logger.info(f"Devices initialized: {self.devices}")
+    async def _ensure_device_connected(self, ip: str, details: Dict[str, Any]) -> None:
+        if ip not in self.devices:
+            await self._attempt_connect(ip, details)
+        else:
+            await self._check_reconnect(ip)
+
+    async def _attempt_connect(self, ip: str, details: Dict[str, Any]) -> None:
+        try:
+            await self.connect_device(ip, details)
+        except Exception as e:  # noqa: PIE786
+            logger.error(f"Failed to initialize device {ip}: {str(e)}")
+
+    async def _check_reconnect(self, ip: str) -> None:
+        device = self.devices[ip]
+        if device.writer is None or device.reader is None:
+            try:
+                await device.connect()
+                logger.info(f"Device {ip} reconnected successfully")
+            except Exception as e:  # noqa: PIE786
+                logger.error(f"Failed to reconnect device {ip}: {str(e)}")
 
     def get_devices(self) -> Dict[str, DeviceC]:
         return self.devices
@@ -287,22 +290,25 @@ class DeviceManager:
         status_result: dict = {"id": {}}
 
         for ip, device in self.devices.items():
-            try:
-                device_status = await device.get_status()
-                for lock in CONFIG[ip]["locks"]:
-                    board = lock["board"]
-                    lock_number = lock["lock"]
-                    status = device_status.get(board, {}).get(lock_number, {}).get("lock", None)
-                    status_result["id"][lock["id"]] = {"status": status}
-            except Exception as e:
-                logger.error(f"Failed to get status from device {ip}: {str(e)}")
-                for lock in CONFIG[ip]["locks"]:
-                    status_result["id"][lock["id"]] = {"status": None}
+            await self._process_device_status(ip, device, status_result)
 
         end_time = time.time()
         duration = end_time - start_time
         logger.info(f"Relaystatus request completed in {duration:.2f} seconds")
         return status_result
+
+    async def _process_device_status(self, ip: str, device: DeviceC, status_result: dict) -> None:
+        try:
+            device_status = await device.get_status()
+            for lock in CONFIG[ip]["locks"]:
+                board = lock["board"]
+                lock_number = lock["lock"]
+                status = device_status.get(board, {}).get(lock_number, {}).get("lock")
+                status_result["id"][lock["id"]] = {"status": status}
+        except Exception as e:  # noqa: PIE786
+            logger.error(f"Failed to get status from device {ip}: {str(e)}")
+            for lock in CONFIG[ip]["locks"]:
+                status_result["id"][lock["id"]] = {"status": None}
 
     async def get_network_status(self) -> dict:
         logger.info("Getting network status for all devices")
